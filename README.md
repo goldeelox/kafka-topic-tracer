@@ -11,3 +11,10 @@ Usage of ./kafka-topic-tracer:
   -topic string
     	Name of topic to trace
 ```
+
+## Sample output
+```bash
+$ ./kafka-topic-tracer -topic test
+Broker: localhost:9092, Topic: test
+    Elapsed time: 27s, Messages recieved: 1000 (37.04/sec), Average size: 100
+```
