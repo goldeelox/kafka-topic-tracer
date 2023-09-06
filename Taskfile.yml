@@ -1,0 +1,46 @@
+version: "3"
+
+tasks:
+  build:
+    cmds:
+      - |
+        docker run --rm -it --platform=linux/amd64 \
+        -v ${PWD}:/data \
+        -w /data \
+        centos:7 \
+        sh -c "yum install -y epel-release; yum install -y go; go build -o kafka-topic-tracer-rhel7_amd64"
+
+  start-test-broker:
+    cmds: 
+      - mkdir -p server
+      - |
+        docker run --rm -d --name kafka-server --hostname kafka-server \
+          -e KAFKA_CFG_NODE_ID=0 \
+          -e KAFKA_CFG_PROCESS_ROLES=controller,broker \
+          -e KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 \
+          -e KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
+          -e KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka-server:9093 \
+          -e KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER \
+          -v ${PWD}/server:/bitnami/kafka \
+          -p 9092:9092 \
+          bitnami/kafka:latest
+
+  stop-test-broker:
+    cmds:
+      - docker stop kafka-server
+
+  sample-producer:
+    env:
+      NUM_RECORDS: 1000
+      THROUGHPUT: 50
+      RECORD_SIZE: 100
+      TOPIC: test
+    cmds:
+      - |
+        docker exec -it kafka-server \
+        /opt/bitnami/kafka/bin/kafka-producer-perf-test.sh \
+        --record-size $RECORD_SIZE \
+        --throughput $THROUGHPUT \
+        --num-records $NUM_RECORDS \
+        --topic $TOPIC \
+        --producer-props bootstrap.servers=kafka-server:9092
