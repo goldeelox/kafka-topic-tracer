@@ -5,27 +5,28 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"time"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 )
 
 var (
-	topic string
-  bootstrapServer string
-  groupId string
+	topic           string
+	bootstrapServer string
+	groupId         string
 )
 
 func init() {
 	flag.StringVar(&topic, "topic", "", "Name of topic to trace")
-  flag.StringVar(&bootstrapServer, "bootstrap-server", "localhost:9092", "The Kafka server to connect to")
-  flag.StringVar(&groupId, "group-id", "kafka-topic-tracer", "Consumer group.id")
-  flag.Parse()
+	flag.StringVar(&bootstrapServer, "bootstrap-server", "localhost:9092", "The Kafka server to connect to")
+	flag.StringVar(&groupId, "group-id", "kafka-topic-tracer", "Consumer group.id")
+	flag.Parse()
 
-  if topic == "" {
-    flag.Usage()
-    os.Exit(0)
-  }
+	if topic == "" {
+		flag.Usage()
+		os.Exit(0)
+	}
 }
 
 func messageSize(m []byte) int {
@@ -49,19 +50,37 @@ func messagesPerSec(start time.Time, count int) float32 {
 func outputStats(start time.Time, count, size int) {
 	avg := avgMessageSize(count, size)
 	mps := messagesPerSec(start, count)
-  et := time.Now().Sub(start)
+	et := time.Now().Sub(start)
 	fmt.Printf("\033[1A  Elapsed time: %s, Messages recieved: %d (%.2f/sec), Average size: %d\n", et.Round(time.Second).String(), count, mps, avg)
 }
 
-func topicPoller(c *kafka.Consumer) {
-  fmt.Printf("  Waiting for messages...\n")
+func topicPoller(c *kafka.Consumer, done chan os.Signal, wg *sync.WaitGroup) {
+	fmt.Printf("  Waiting for messages...\n")
 	start := time.Now()
 	totalCount, totalMsgSize := 0, 0
+
 	for {
+		// Gracefully close connection when interrupt is caught
+		select {
+		case <-done:
+			err := c.Unsubscribe()
+			fmt.Printf("Unsubscribing and closing consumer connection...\n")
+			time.Sleep(1 * time.Second)
+			err = c.Close()
+			if err != nil {
+				fmt.Printf("Error closing session: %v", err)
+			}
+			wg.Done()
+			return
+		default:
+		}
+
+		// poll for new messages
 		ev := c.Poll(1000)
-    if totalCount > 0 && totalMsgSize > 0 {
-      outputStats(start, totalCount, totalMsgSize)
-    }
+		if totalCount > 0 && totalMsgSize > 0 {
+			outputStats(start, totalCount, totalMsgSize)
+		}
+
 		switch e := ev.(type) {
 		case *kafka.Message:
 			totalCount += 1
@@ -70,7 +89,7 @@ func topicPoller(c *kafka.Consumer) {
 		case kafka.Error:
 			fmt.Fprintf(os.Stderr, "%% Error: %v\n", e)
 			c.Close()
-			os.Exit(1)
+      wg.Done()
 		default:
 			// reset start time until we start consuming messages
 			if totalCount == 0 {
@@ -98,19 +117,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt)
 
-  fmt.Printf("Broker: %s, Topic: %s\n", bootstrapServer, topic)
-	go topicPoller(consumer)
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
 
-	<-c
-  fmt.Printf("Unsubscribing and closing consumer connection...")
-  err = consumer.Unassign()
-	err = consumer.Unsubscribe()
-	err = consumer.Close()
-  if err != nil {
-    fmt.Printf("Error closing session: %v", err)
-  }
-	os.Exit(0)
+	fmt.Printf("Broker: %s, Topic: %s\n", bootstrapServer, topic)
+	go topicPoller(consumer, done, wg)
+
+	wg.Wait()
 }

@@ -3,6 +3,10 @@ version: "3"
 tasks:
   build:
     cmds:
+      - go build
+
+  build-rhel:
+    cmds:
       - |
         docker run --rm -it --platform=linux/amd64 \
         -v ${PWD}:/data \
