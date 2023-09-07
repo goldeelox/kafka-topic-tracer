@@ -1,18 +1,33 @@
 version: "3"
 
+vars:
+  PROJECT: kafka-topic-tracer
+
 tasks:
   build:
+    desc: Build source for all platforms
     cmds:
-      - go build
+      - task: build-generic
+        vars:
+          GOOS: linux
+          GOARCH: amd64
+      - task: build-generic
+        vars:
+          GOOS: darwin
+          GOARCH: arm64
 
-  build-rhel:
+  build-generic:
+    desc: Build source
+    internal: true
+    requires:
+      vars:
+        - GOOS
+        - GOARCH
+    env:
+      GOOS: "{{ .GOOS }}"
+      GOARCH: "{{ .GOARCH }}"
     cmds:
-      - |
-        docker run --rm -it --platform=linux/amd64 \
-        -v ${PWD}:/data \
-        -w /data \
-        centos:7 \
-        sh -c "yum install -y epel-release; yum install -y go; go build -o kafka-topic-tracer-rhel7_amd64"
+      - go build -o dist/{{ .PROJECT }}-${GOOS}_${GOARCH}
 
   start-test-broker:
     cmds: 
@@ -36,7 +51,7 @@ tasks:
   sample-producer:
     env:
       NUM_RECORDS: 1000
-      THROUGHPUT: 50
+      THROUGHPUT: 100
       RECORD_SIZE: 100
       TOPIC: test
     cmds:
