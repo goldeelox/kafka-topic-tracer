@@ -60,6 +60,7 @@ func outputStats(start time.Time, count, size int64) {
 	fmt.Printf("  Elapsed time: %s, Messages recieved: %d (%.2f/sec), Average size: %d\033[0K\r", et.Round(time.Second).String(), count, mps, avg)
 }
 
+
 func topicReader() *kafka.Reader {
 	maxWait, _ := time.ParseDuration("1s")
 	return kafka.NewReader(kafka.ReaderConfig{
@@ -87,11 +88,11 @@ func messagePoller(r *kafka.Reader) {
 	}
 }
 
-func statPoller(r *kafka.Reader) {
+func statPoller(r *kafka.Reader, intervalSec time.Duration) {
 	start := time.Now()
 	var totalCount, totalMsgSize int64
 
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(intervalSec * time.Second)
 	for {
 		select {
 		case <-ticker.C:
@@ -115,7 +116,7 @@ func main() {
 
 	reader := topicReader()
 	go messagePoller(reader)
-	go statPoller(reader)
+	go statPoller(reader, 1)
 
 	select {
 	case <-done:
