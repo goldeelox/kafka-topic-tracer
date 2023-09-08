@@ -52,8 +52,8 @@ func (s *ReaderStats) messageRateString() string {
 }
 
 func (s *ReaderStats) avgMessageSizeString() string {
-  if isZero(s.MessageCount) || isZero(s.MessageSize) {
-    return "0"
-  }
-  return strconv.FormatInt(s.MessageSize / s.MessageCount, 10)
+	if isZero(s.MessageCount) || isZero(s.MessageSize) {
+		return "0"
+	}
+	return strconv.FormatInt(s.MessageSize/s.MessageCount, 10)
 }

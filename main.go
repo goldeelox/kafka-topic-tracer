@@ -58,19 +58,19 @@ func messagePoller(r *kafka.Reader) {
 }
 
 func statPoller(r *kafka.Reader, intervalSec time.Duration) {
-  readerStats := &ReaderStats{
-    StartTime: time.Now(),
-    MessageCount: 0,
-    MessageSize: 0,
-  }
+	readerStats := &ReaderStats{
+		StartTime:    time.Now(),
+		MessageCount: 0,
+		MessageSize:  0,
+	}
 
 	ticker := time.NewTicker(intervalSec * time.Second)
 	for {
 		select {
 		case <-ticker.C:
 			stats := r.Stats()
-      readerStats.MessageCount += stats.Messages
-      readerStats.MessageSize += stats.Bytes
+			readerStats.MessageCount += stats.Messages
+			readerStats.MessageSize += stats.Bytes
 
 			if isZero(stats.Offset) {
 				// reset start timer until coordinator assigns partitions
@@ -91,10 +91,10 @@ func statPoller(r *kafka.Reader, intervalSec time.Duration) {
 					Name:  "Message rate (per sec)",
 					Value: readerStats.messageRateString(),
 				},
-        {
-          Name: "Avg message size (bytes)",
-          Value: readerStats.avgMessageSizeString(),
-        },
+				{
+					Name:  "Avg message size (bytes)",
+					Value: readerStats.avgMessageSizeString(),
+				},
 			})
 		}
 	}
