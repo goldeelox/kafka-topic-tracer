@@ -4,10 +4,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/segmentio/kafka-go"
 	"os"
 	"os/signal"
 	"time"
+
+	"github.com/segmentio/kafka-go"
 )
 
 var (
@@ -28,38 +29,6 @@ func init() {
 		os.Exit(0)
 	}
 }
-
-func isZero(d int64) bool {
-	if d == 0 {
-		return true
-	}
-	return false
-}
-
-func avgMessageSize(count, size int64) int64 {
-	if isZero(count) || isZero(size) {
-		return 0
-	}
-
-	return size / count
-}
-
-func messagesPerSec(start time.Time, count int64) float32 {
-	secondsElapsed := time.Now().Unix() - start.Unix()
-	if isZero(secondsElapsed) || isZero(count) {
-		return 0
-	}
-
-	return float32(count) / float32(secondsElapsed)
-}
-
-func outputStats(start time.Time, count, size int64) {
-	avg := avgMessageSize(count, size)
-	mps := messagesPerSec(start, count)
-	et := time.Now().Sub(start)
-	fmt.Printf("  Elapsed time: %s, Messages recieved: %d (%.2f/sec), Average size: %d\033[0K\r", et.Round(time.Second).String(), count, mps, avg)
-}
-
 
 func topicReader() *kafka.Reader {
 	maxWait, _ := time.ParseDuration("1s")
@@ -89,22 +58,44 @@ func messagePoller(r *kafka.Reader) {
 }
 
 func statPoller(r *kafka.Reader, intervalSec time.Duration) {
-	start := time.Now()
-	var totalCount, totalMsgSize int64
+  readerStats := &ReaderStats{
+    StartTime: time.Now(),
+    MessageCount: 0,
+    MessageSize: 0,
+  }
 
 	ticker := time.NewTicker(intervalSec * time.Second)
 	for {
 		select {
 		case <-ticker.C:
 			stats := r.Stats()
-			totalCount += stats.Messages
-			totalMsgSize += stats.Bytes
+      readerStats.MessageCount += stats.Messages
+      readerStats.MessageSize += stats.Bytes
+
 			if isZero(stats.Offset) {
 				// reset start timer until coordinator assigns partitions
-				start = time.Now()
+				readerStats.StartTime = time.Now()
 				continue
 			}
-			outputStats(start, totalCount, totalMsgSize)
+
+			updateStatsOutput([]Stat{
+				{
+					Name:  "Elapsed time",
+					Value: readerStats.elapsedTime().String(),
+				},
+				{
+					Name:  "Messages received",
+					Value: readerStats.countString(),
+				},
+				{
+					Name:  "Message rate (per sec)",
+					Value: readerStats.messageRateString(),
+				},
+        {
+          Name: "Avg message size (bytes)",
+          Value: readerStats.avgMessageSizeString(),
+        },
+			})
 		}
 	}
 }
